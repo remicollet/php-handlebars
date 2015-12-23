@@ -139,14 +139,6 @@ static void php_handlebars_compiler_to_zval(struct handlebars_compiler * compile
         add_assoc_zval_ex(current, PHP5TO7_STRL("decorators"), tmp);
     }
 
-    // Input flags
-    if( compiler->string_params ) {
-        add_assoc_bool_ex(current, PHP5TO7_STRL("stringParams"), compiler->string_params);
-    }
-    if( compiler->track_ids ) {
-        add_assoc_bool_ex(current, PHP5TO7_STRL("trackIds"), compiler->track_ids);
-    }
-
     // Output flags
     if( compiler->result_flags & handlebars_compiler_result_flag_use_depths ) {
         add_assoc_bool_ex(current, PHP5TO7_STRL("useDepths"), 1);
@@ -336,8 +328,6 @@ PHP_MINIT_FUNCTION(handlebars_compiler)
 
     zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("NONE"), handlebars_compiler_flag_none TSRMLS_CC);
     zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("USE_DEPTHS"), handlebars_compiler_flag_use_depths TSRMLS_CC);
-    zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("STRING_PARAMS"), handlebars_compiler_flag_string_params TSRMLS_CC);
-    zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("TRACK_IDS"), handlebars_compiler_flag_track_ids TSRMLS_CC);
     zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("NO_ESCAPE"), handlebars_compiler_flag_no_escape TSRMLS_CC);
     zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("KNOWN_HELPERS_ONLY"), handlebars_compiler_flag_known_helpers_only TSRMLS_CC);
     zend_declare_class_constant_long(HandlebarsCompiler_ce_ptr, ZEND_STRL("PREVENT_INDENT"), handlebars_compiler_flag_prevent_indent TSRMLS_CC);

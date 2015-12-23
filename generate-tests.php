@@ -1,7 +1,8 @@
 #!/usr/bin/env php
 <?php
 
-/* vim: tabstop=4:softtabstop=4:shiftwidth=4:expandtab */
+$startTime = microtime(true);
+$nTests = 0;
 
 // Utils
 
@@ -74,8 +75,8 @@ function patch_opcodes(array &$opcodes) {
         // Make sure the keys are always in the same order
         uksort($main, function($a, $b) {
             $keys = array(
-                'opcodes', 'children', 'stringParams', 'trackIds',
-                'useDepths', 'usePartial', 'useDecorators', 'blockParams'
+                'opcodes', 'children', 'useDepths', 'usePartial', 'useDecorators',
+                'blockParams'
             );
             $ai = array_search($a, $keys);
             $bi = array_search($b, $keys);
@@ -104,12 +105,6 @@ function makeCompilerFlags(array $options = null)
     }
     if( !empty($options['useDepths']) ) {
         $flags |= (1 << 0); //Handlebars\COMPILER_FLAG_USE_DEPTHS;
-    }
-    if( !empty($options['stringParams']) ) {
-        $flags |= (1 << 1); //Handlebars\COMPILER_FLAG_STRING_PARAMS;
-    }
-    if( !empty($options['trackIds']) ) {
-        $flags |= (1 << 2); //Handlebars\COMPILER_FLAG_TRACK_IDS;
     }
     if( !empty($options['noEscape']) ) {
         $flags |= (1 << 3); //Handlebars\COMPILER_FLAG_NO_ESCAPE;
@@ -330,6 +325,7 @@ foreach( array($tokenizerSpecFile, $parserSpecFile) as $file ) {
     $number = 0;
     foreach( $tests as $test ) {
         ++$number;
+        ++$nTests;
         $test['suiteType'] = 'spec';
         $test['suiteName'] = $suiteName;
         $test['number'] = $number;
@@ -356,9 +352,22 @@ foreach( scandir($exportDir) as $file ) {
     $number = 0;
     foreach( $tests as $test ) {
         ++$number;
+        ++$nTests;
         $test['suiteType'] = 'export';
         $test['suiteName'] = $suiteName;
         $test['number'] = $number;
         hbs_generate_export_test($test);
     }
 }
+
+printf("%d tests generated in %f seconds\n", $nTests, microtime(true) - $startTime);
+
+/*
+ * Local variables:
+ * tab-width: 4
+ * c-basic-offset: 4
+ * End:
+ * vim600: fdm=marker
+ * vim: et sw=4 ts=4
+ */
+
