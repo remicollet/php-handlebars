@@ -28,9 +28,16 @@ PHP_METHOD(HandlebarsUtils, appendContextPath)
     strsize_t tmp_length = 0;
     char * out;
 
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zs", &context_path, &id, &id_length) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+	    Z_PARAM_ZVAL(context_path)
+        Z_PARAM_STRING(id, id_length)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     switch( Z_TYPE_P(context_path) ) {
         case IS_ARRAY:
@@ -70,7 +77,7 @@ PHP_METHOD(HandlebarsUtils, appendContextPath)
 
 /* {{{ proto mixed Handlebars\Utils::createFrame(mixed $value) */
 #if PHP_MAJOR_VERSION < 7
-static inline void php_handlebars_create_frame(zval * return_value, zval * value, zval * frame TSRMLS_DC)
+static inline void php_handlebars_create_frame(zval * return_value, zval * value TSRMLS_DC)
 {
     array_init(return_value);
 
@@ -88,7 +95,7 @@ static inline void php_handlebars_create_frame(zval * return_value, zval * value
     zval_copy_ctor(return_value);
 }
 #else
-static inline void php_handlebars_create_frame(zval * return_value, zval * value, zval * frame)
+static inline void php_handlebars_create_frame(zval * return_value, zval * value)
 {
     zval tmp;
 
@@ -111,17 +118,31 @@ static inline void php_handlebars_create_frame(zval * return_value, zval * value
 PHP_METHOD(HandlebarsUtils, createFrame)
 {
     zval * value;
-    zval * frame;
 
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &value) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(value)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
-    php_handlebars_create_frame(return_value, value, frame TSRMLS_CC);
+    php_handlebars_create_frame(return_value, value TSRMLS_CC);
 }
 /* }}} Handlebars\Utils::createFrame */
 
 /* {{{ proto mixed Handlebars\Utils::nameLookup(mixed value, string field) */
+static zend_always_inline short is_integer_string(char * str, strsize_t len) {
+    char * endstr = str + len;
+    for( ; str != endstr; str++ ) {
+        if( !ZEND_IS_DIGIT(*str) ) {
+            return 0;
+        }
+    }
+    return 1;
+}
 #if PHP_MAJOR_VERSION < 7
 static zend_always_inline void php_handlebars_name_lookup(zval * value, zval * field, zval * return_value TSRMLS_DC)
 {
@@ -133,33 +154,41 @@ static zend_always_inline void php_handlebars_name_lookup(zval * value, zval * f
     zval * params[1];
 
     // Support integer keys
-    if( Z_TYPE_P(field) == IS_LONG ) {
-        index = Z_LVAL_P(field);
-        convert_to_string(field);
-    } else {
-        convert_to_string(field);
-        if( is_numeric_string(Z_STRVAL_P(field), Z_STRLEN_P(field), NULL, NULL, 0) ) {
-            sscanf(Z_STRVAL_P(field), "%ld", &index);
-        }
+    switch( Z_TYPE_P(field) ) {
+        case IS_LONG:
+            index = Z_LVAL_P(field);
+            convert_to_string(field);
+            break;
+        default:
+            convert_to_string(field);
+            // fall-through
+        case IS_STRING:
+            if( is_integer_string(Z_STRVAL_P(field), Z_STRLEN_P(field)) ) {
+                sscanf(Z_STRVAL_P(field), "%ld", &index);
+            }
+            break;
     }
 
-    if( Z_TYPE_P(value) == IS_ARRAY ) {
-        if( index > -1 && (entry = php5to7_zend_hash_index_find(Z_ARRVAL_P(value), index)) ) {
+    switch( Z_TYPE_P(value) ) {
+        case IS_ARRAY:
+            if( index > -1 && (entry = php5to7_zend_hash_index_find(Z_ARRVAL_P(value), index)) ) {
 
-        } else {
-        	entry = php5to7_zend_hash_find(Z_ARRVAL_P(value), Z_STRVAL_P(field), Z_STRLEN_P(field));
-        }
-    } else if( Z_TYPE_P(value) == IS_OBJECT ) {
-        if( instanceof_function(Z_OBJCE_P(value), zend_ce_arrayaccess TSRMLS_CC) ) {
-            MAKE_STD_ZVAL(prop);
-            ZVAL_STRINGL(prop, Z_STRVAL_P(field), Z_STRLEN_P(field), 1);
-            if( Z_OBJ_HT_P(value)->has_dimension(value, prop, 0 TSRMLS_CC) ) {
-            	entry = Z_OBJ_HT_P(value)->read_dimension(value, prop, 0 TSRMLS_CC);
+            } else {
+            	entry = php5to7_zend_hash_find(Z_ARRVAL_P(value), Z_STRVAL_P(field), Z_STRLEN_P(field));
             }
-            zval_ptr_dtor(&prop);
-        } else {
-        	entry = zend_read_property(Z_OBJCE_P(value), value, Z_STRVAL_P(field), Z_STRLEN_P(field), 1 TSRMLS_CC);
-        }
+            break;
+        case IS_OBJECT:
+            if( instanceof_function(Z_OBJCE_P(value), zend_ce_arrayaccess TSRMLS_CC) ) {
+                MAKE_STD_ZVAL(prop);
+                ZVAL_STRINGL(prop, Z_STRVAL_P(field), Z_STRLEN_P(field), 1);
+                if( Z_OBJ_HT_P(value)->has_dimension(value, prop, 0 TSRMLS_CC) ) {
+                	entry = Z_OBJ_HT_P(value)->read_dimension(value, prop, 0 TSRMLS_CC);
+                }
+                zval_ptr_dtor(&prop);
+            } else {
+            	entry = zend_read_property(Z_OBJCE_P(value), value, Z_STRVAL_P(field), Z_STRLEN_P(field), 1 TSRMLS_CC);
+            }
+            break;
     }
 
     if( entry ) {
@@ -179,43 +208,50 @@ static zend_always_inline void php_handlebars_name_lookup(zval * value, zval * f
     zval *retval = NULL;
 
     // Support integer keys
-    if( Z_TYPE_P(field) == IS_LONG ) {
-        index = Z_LVAL_P(field);
-        convert_to_string(field);
-    } else {
-        convert_to_string(field);
-        if( is_numeric_string(Z_STRVAL_P(field), Z_STRLEN_P(field), NULL, NULL, 0) ) {
-            sscanf(Z_STRVAL_P(field), "%ld", &long_index);
-            index = (zend_long) long_index;
-        }
+    switch( Z_TYPE_P(field) ) {
+        case IS_LONG:
+            index = Z_LVAL_P(field);
+            convert_to_string(field);
+            break;
+        default:
+            convert_to_string(field);
+            // fall-through
+        case IS_STRING:
+            if( is_integer_string(Z_STRVAL_P(field), Z_STRLEN_P(field)) ) {
+                sscanf(Z_STRVAL_P(field), "%ld", &index);
+            }
+            break;
     }
 
-    if( Z_TYPE_P(value) == IS_ARRAY ) {
-        if( index > -1 && (entry = php5to7_zend_hash_index_find(Z_ARRVAL_P(value), index)) ) {
-            // nothing
-        } else {
-            entry = php5to7_zend_hash_find(Z_ARRVAL_P(value), Z_STRVAL_P(field), Z_STRLEN_P(field));
-        }
-    } else if( Z_TYPE_P(value) == IS_OBJECT ) {
-        if( instanceof_function(Z_OBJCE_P(value), zend_ce_arrayaccess TSRMLS_CC) ) {
-            if( Z_OBJ_HT_P(value)->has_dimension(value, field, 0 TSRMLS_CC) ) {
-                retval = Z_OBJ_HT_P(value)->read_dimension(value, field, 0, &result TSRMLS_CC);
-                if( retval ) {
-                    if( &result != retval ) {
-                        ZVAL_COPY(&result, retval);
-                    }
-                } else {
-                    ZVAL_NULL(&result);
-                }
-                RETVAL_ZVAL(&result, 0, 0);
+    switch( Z_TYPE_P(value) ) {
+        case IS_ARRAY:
+            if( index > -1 && (entry = php5to7_zend_hash_index_find(Z_ARRVAL_P(value), index)) ) {
+                // nothing
+            } else {
+                entry = php5to7_zend_hash_find(Z_ARRVAL_P(value), Z_STRVAL_P(field), Z_STRLEN_P(field));
             }
-        } else {
-            entry = zend_read_property(Z_OBJCE_P(value), value, Z_STRVAL_P(field), Z_STRLEN_P(field), 1, NULL TSRMLS_CC);
-        }
+            break;
+        case IS_OBJECT:
+            if( instanceof_function(Z_OBJCE_P(value), zend_ce_arrayaccess TSRMLS_CC) ) {
+                if( Z_OBJ_HT_P(value)->has_dimension(value, field, 0 TSRMLS_CC) ) {
+                    retval = Z_OBJ_HT_P(value)->read_dimension(value, field, 0, &result TSRMLS_CC);
+                    if( retval ) {
+                        if( &result != retval ) {
+                            ZVAL_COPY(&result, retval);
+                        }
+                    } else {
+                        ZVAL_NULL(&result);
+                    }
+                    RETVAL_ZVAL(&result, 0, 0);
+                }
+            } else {
+                entry = zend_read_property(Z_OBJCE_P(value), value, Z_STRVAL_P(field), Z_STRLEN_P(field), 1, NULL TSRMLS_CC);
+            }
+            break;
     }
 
     if( entry ) {
-        if (Z_TYPE_P(entry) == IS_INDIRECT) {
+        if( Z_TYPE_P(entry) == IS_INDIRECT ) {
             entry = Z_INDIRECT_P(entry);
         }
         RETVAL_ZVAL(entry, 1, 0);
@@ -228,10 +264,16 @@ PHP_METHOD(HandlebarsUtils, nameLookup)
     zval * value;
     zval * field;
 
-    // Arguments
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zz", &value, &field) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(2, 2)
+	    Z_PARAM_ZVAL(value)
+	    Z_PARAM_ZVAL(field)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     php_handlebars_name_lookup(value, field, return_value TSRMLS_CC);
 }
@@ -245,9 +287,15 @@ PHP_METHOD(HandlebarsUtils, isCallable)
     zend_bool retval = 0;
     int check_flags = 0; //IS_CALLABLE_CHECK_SYNTAX_ONLY;
 
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &var) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(var)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     if( Z_TYPE_P(var) != IS_OBJECT ) {
         RETURN_FALSE;
@@ -342,10 +390,15 @@ PHP_METHOD(HandlebarsUtils, isIntArray)
 {
     zval * arr;
 
-    // Arguments
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &arr) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(arr)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     if( php_handlebars_is_int_array(arr TSRMLS_CC) ) {
         RETURN_TRUE;
@@ -430,10 +483,15 @@ PHP_METHOD(HandlebarsUtils, expression)
 {
     zval * val;
 
-    // Arguments
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &val) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(val)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     php_handlebars_expression(val, return_value TSRMLS_CC);
 }
@@ -479,10 +537,15 @@ PHP_METHOD(HandlebarsUtils, escapeExpression)
 {
     zval * val;
 
-    // Arguments
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &val) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(val)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     php_handlebars_escape_expression(val, return_value TSRMLS_CC);
 }
@@ -612,10 +675,15 @@ PHP_METHOD(HandlebarsUtils, escapeExpressionCompat)
 {
     zval * val;
 
-    // Arguments
+#ifndef FAST_ZPP
     if( zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &val) == FAILURE ) {
         return;
     }
+#else
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+	    Z_PARAM_ZVAL(val)
+    ZEND_PARSE_PARAMETERS_END();
+#endif
 
     php_handlebars_escape_expression_compat(val, return_value TSRMLS_CC);
 }
