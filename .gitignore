@@ -4,6 +4,7 @@
 .deps
 .dirstamp
 .libs
+.php-version
 .settings
 autom4te.cache
 gmon*
