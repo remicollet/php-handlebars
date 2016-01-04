@@ -62,6 +62,9 @@ static zend_always_inline void token_to_zval(struct handlebars_token * token, zv
 		zval_dtor(&z_const);
 #endif
 	} while(0);
+
+	zval_dtor(name);
+	zval_dtor(text);
 }
 
 /* {{{ proto mixed Handlebars\Tokenizer::lex(string tmpl) */

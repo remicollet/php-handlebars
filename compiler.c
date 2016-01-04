@@ -109,6 +109,9 @@ static void php_handlebars_opcode_to_zval(struct handlebars_opcode * opcode, zva
 		zval_dtor(&z_const);
 #endif
 	} while(0);
+
+	zval_dtor(type);
+    Z_TRY_DELREF_P(args);
 }
 
 static zend_always_inline void php_handlebars_opcodes_to_zval(
